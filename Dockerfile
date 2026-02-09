@@ -1,91 +1,143 @@
-# Build stage
-FROM php:8.2-fpm AS build
+FROM composer:2 AS composer
 
-# Install system dependencies and PHP extensions
-RUN apt-get update && apt-get install -y \
-    git \
-    curl \
-    libpng-dev \
-    libonig-dev \
-    libxml2-dev \
-    zip \
-    unzip \
-    sqlite3 \
-    libsqlite3-dev \
-    && docker-php-ext-install pdo_sqlite mbstring exif pcntl bcmath opcache \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
 
-# Install Composer
-COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
-
-WORKDIR /var/www/html
-
-# Copy composer files first for better caching
 COPY composer.json composer.lock ./
 
-# Install dependencies (no dev for production)
-RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist
+# Install dependencies
+RUN composer install \
+    --no-dev \
+    --optimize-autoloader \
+    --no-interaction \
+    --no-progress
+
+# Copy rest of application
+COPY . .
+
+FROM node:20-alpine AS frontend
+
+WORKDIR /app
+
+COPY package*.json ./
+
+# Install npm dependencies
+RUN npm ci --no-audit
 
 # Copy application code
 COPY . .
 
-# Generate optimized autoloader
-RUN composer dump-autoload --optimize
+# Build assets (Vite compiles JS/CSS)
+RUN npm run build
 
-# Production stage
-FROM php:8.2-fpm-alpine AS production
+FROM php:8.2-fpm-alpine AS base
 
-# Install runtime dependencies only
+# Install system dependencies
 RUN apk add --no-cache \
-    sqlite \
-    libpng \
-    oniguruma \
-    libxml2 \
-    nginx \
-    supervisor
+    nginx \           # Web server
+    supervisor \      # Process manager (runs nginx + php-fpm)
+    curl \           # Health checks
+    bash \           # Shell scripts
+    postgresql-dev \ # PostgreSQL support
+    mysql-client \   # MySQL support (optional)
+    libpng-dev \     # Image processing
+    libjpeg-turbo-dev \
+    freetype-dev \
+    libzip-dev \
+    oniguruma-dev \
+    icu-dev
 
 # Install PHP extensions
-RUN docker-php-ext-install pdo_sqlite mbstring bcmath opcache
+RUN docker-php-ext-configure gd \
+    --with-freetype \
+    --with-jpeg \
+    && docker-php-ext-install -j$(nproc) \
+    pdo \           # Database PDO
+    pdo_mysql \     # MySQL driver
+    pdo_pgsql \     # PostgreSQL driver
+    bcmath \        # Math operations 
+    pcntl \         # Process control
+    gd \            # Image processing
+    zip \           # Zip archives
+    opcache \       # PHP opcode cache 
+    mbstring \      # Multibyte string support
+    intl            # Internationalization
 
-# Configure PHP for production
-RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
+# Install Redis extension (for caching)
+RUN pecl install redis \
+    && docker-php-ext-enable redis
 
-# Copy OPcache configuration
-COPY docker/php/opcache.ini /usr/local/etc/php/conf.d/opcache.ini
+# Create non-root user
+RUN addgroup -g 1000 www \
+    && adduser -u 1000 -G www -s /bin/sh -D www
 
-# Copy Nginx configuration
-COPY docker/nginx/default.conf /etc/nginx/http.d/default.conf
-
-# Copy Supervisor configuration
-COPY docker/supervisor/supervisord.conf /etc/supervisord.conf
-
+# Set working directory
 WORKDIR /var/www/html
 
-# Copy application from build stage
-COPY --from=build /var/www/html /var/www/html
+# Copy configuration files
+COPY docker/nginx/nginx.conf /etc/nginx/nginx.conf
+COPY docker/nginx/default.conf /etc/nginx/http.d/default.conf
+COPY docker/php/php.ini /usr/local/etc/php/conf.d/custom.ini
+COPY docker/php/opcache.ini /usr/local/etc/php/conf.d/opcache.ini
+COPY docker/supervisor/supervisord.conf /etc/supervisord.conf
 
-# Create storage and cache directories
-RUN mkdir -p storage/logs storage/framework/cache storage/framework/sessions storage/framework/views bootstrap/cache database
+# Copy application code
+COPY --chown=www:www . .
 
-# Set permissions for www-data
-RUN chown -R www-data:www-data /var/www/html \
-    && chmod -R 775 storage bootstrap/cache database
+# Copy built dependencies from previous stages
+COPY --from=composer --chown=www:www /app/vendor ./vendor
+COPY --from=frontend --chown=www:www /app/public/build ./public/build
 
-# Create SQLite database file
-RUN touch database/database.sqlite && chown www-data:www-data database/database.sqlite
+# Set permissions
+RUN chown -R www:www /var/www/html \
+    && chmod -R 755 /var/www/html/storage \
+    && chmod -R 755 /var/www/html/bootstrap/cache
+
+# Create required directories
+RUN mkdir -p /var/www/html/storage/framework/{sessions,views,cache} \
+    && mkdir -p /var/www/html/storage/logs \
+    && chown -R www:www /var/www/html/storage
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=40s \
     CMD curl -f http://localhost/api/health || exit 1
 
-# Expose port
+# Expose port 80
 EXPOSE 80
 
-# Run as non-root user
-USER www-data
+#  Development Image
 
-# Switch back to root for supervisor
+FROM base AS development
+
+# Install Xdebug (debugging)
+RUN pecl install xdebug \
+    && docker-php-ext-enable xdebug
+
+# Copy Xdebug configuration
+COPY docker/php/xdebug.ini /usr/local/etc/php/conf.d/xdebug.ini
+
+# Development PHP settings
+RUN echo "opcache.validate_timestamps=1" >> /usr/local/etc/php/conf.d/opcache.ini
+
+# Run as root in development (easier for permissions)
 USER root
 
+# Start supervisor (manages nginx + php-fpm)
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]
+
+# Production Image
+
+FROM base AS production
+
+# Production PHP settings
+RUN echo "opcache.validate_timestamps=0" >> /usr/local/etc/php/conf.d/opcache.ini
+
+# Optimize Laravel
+RUN php artisan config:cache || true \
+    && php artisan route:cache || true \
+    && php artisan view:cache || true
+
+# Switch to non-root user
+USER www
+
+# Start supervisor
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]

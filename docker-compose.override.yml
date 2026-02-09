@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  
+  traefik:
+    restart: "no"
+    
+    # Development Traefik settings
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--api.dashboard=true"
+      - "--api.insecure=true" 
+      - "--log.level=DEBUG"   
+    
+    # Labels for easier identification
+    labels:
+      - "dev.environment=local"
+  
+  # App Overrides (Development)
+  app:
+    build:
+      target: development 
+    
+    # Restart policy
+    restart: "no"
+    
+    volumes:
+      - .:/var/www/html
+      - /var/www/html/vendor
+      - /var/www/html/node_modules
+    
+    # Development environment variables
+    environment:
+      - APP_ENV=local
+      - APP_DEBUG=true
+      - LOG_LEVEL=debug
+    
+    # Labels
+    labels:
+      - "dev.environment=local"
+  
+  # Database Overrides (Development)
+  db:
+    ports:
+      - "5432:5432"
+    
+    restart: "no"
+    
+    labels:
+      - "dev.environment=local"
+  
+  # Redis Overrides (Development)
+  redis:
+    ports:
+      - "6379:6379"
+    
+    restart: "no"
+    
+    labels:
+      - "dev.environment=local"
+  
+  # Mailhog (Email Testing )
+  mailhog:
+    image: mailhog/mailhog:latest
+    
+    ports:
+      - "1025:1025"  
+      - "8025:8025"  
+    
+    networks:
+      - secure-drop-network
+    
+    restart: "no"
+    
+    labels:
+      - "dev.environment=local"
