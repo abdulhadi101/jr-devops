@@ -6,7 +6,8 @@ COPY composer.json composer.lock ./
 
 # Install dependencies
 RUN composer install \
-    --no-dev \
+    --no-scripts \
+    --no-autoloader \
     --optimize-autoloader \
     --no-interaction \
     --no-progress
@@ -14,53 +15,46 @@ RUN composer install \
 # Copy rest of application
 COPY . .
 
-FROM node:20-alpine AS frontend
-
-WORKDIR /app
-
-COPY package*.json ./
-
-# Install npm dependencies
-RUN npm ci --no-audit
-
-# Copy application code
-COPY . .
-
-# Build assets (Vite compiles JS/CSS)
-RUN npm run build
+# Generate autoloader
+RUN composer dump-autoload --optimize --no-scripts
 
 FROM php:8.2-fpm-alpine AS base
 
 # Install system dependencies
 RUN apk add --no-cache \
-    nginx \           # Web server
-supervisor \      # Process manager (runs nginx + php-fpm)
-curl \           # Health checks
-bash \           # Shell scripts
-postgresql-dev \ # PostgreSQL support
-mysql-client \   # MySQL support (optional)
-libpng-dev \     # Image processing
-libjpeg-turbo-dev \
+    nginx \
+    supervisor \
+    curl \
+    bash \
+    postgresql-dev \
+    mysql-client \
+    libpng-dev \
+    libjpeg-turbo-dev \
     freetype-dev \
     libzip-dev \
     oniguruma-dev \
-    icu-dev
+    icu-dev \
+    $PHPIZE_DEPS \
+    autoconf \
+    g++ \
+    make \
+    linux-headers
 
 # Install PHP extensions
 RUN docker-php-ext-configure gd \
     --with-freetype \
     --with-jpeg \
     && docker-php-ext-install -j$(nproc) \
-    pdo \           # Database PDO
-pdo_mysql \     # MySQL driver
-pdo_pgsql \     # PostgreSQL driver
-bcmath \        # Math operations 
-pcntl \         # Process control
-gd \            # Image processing
-zip \           # Zip archives
-opcache \       # PHP opcode cache 
-mbstring \      # Multibyte string support
-intl            # Internationalization
+    pdo \
+    pdo_mysql \
+    pdo_pgsql \
+    bcmath \
+    pcntl \
+    gd \
+    zip \
+    opcache \
+    mbstring \
+    intl
 
 # Install Redis extension (for caching)
 RUN pecl install redis \
@@ -83,9 +77,8 @@ COPY docker/supervisor/supervisord.conf /etc/supervisord.conf
 # Copy application code
 COPY --chown=www:www . .
 
-# Copy built dependencies from previous stages
+# Copy built dependencies from composer stage
 COPY --from=composer --chown=www:www /app/vendor ./vendor
-COPY --from=frontend --chown=www:www /app/public/build ./public/build
 
 # Set permissions
 RUN chown -R www:www /var/www/html \
@@ -109,14 +102,15 @@ EXPOSE 80
 FROM base AS development
 
 # Install Xdebug (debugging)
-RUN pecl install xdebug \
+RUN apk add --no-cache $PHPIZE_DEPS linux-headers \
+    && pecl install xdebug \
     && docker-php-ext-enable xdebug
 
 # Copy Xdebug configuration
 COPY docker/php/xdebug.ini /usr/local/etc/php/conf.d/xdebug.ini
 
-# Development PHP settings
-RUN echo "opcache.validate_timestamps=1" >> /usr/local/etc/php/conf.d/opcache.ini
+# Development PHP settings (opcache.validate_timestamps already set in opcache.ini)
+
 
 # Run as root in development (easier for permissions)
 USER root
