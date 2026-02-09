@@ -20,7 +20,6 @@ APP_DIR=${APP_DIR:-"$HOME/secure-drop"}
 
 if [ -z "$DOMAIN" ]; then
     echo "❌ Error: DOMAIN environment variable is required"
-    echo "Usage: curl -fsSL https://... | DOMAIN=your-domain.com bash"
     exit 1
 fi
 
@@ -124,58 +123,31 @@ EOF
 
 echo "✅ Environment file created"
 
-# Step 7: Pull and start services
+# Step 7: Pull and start
 echo "🐳 Step 7/8: Starting Docker services..."
 docker-compose --env-file .env.docker -f docker-compose.yml -f docker-compose.prod.yml pull
 docker-compose --env-file .env.docker -f docker-compose.yml -f docker-compose.prod.yml up -d
 
-# Wait for app container to be ready
-echo "⏳ Waiting for application to start..."
+# Step 8: Initialization logic
+echo "🔑 Step 8/8: Initializing application..."
+# Generate key if empty
+if ! grep -q "APP_KEY=base64" .env.docker; then
+    APP_KEY="base64:$(openssl rand -base64 32)"
+    sed -i "s|APP_KEY=|APP_KEY=$APP_KEY|" .env.docker
+    docker-compose --env-file .env.docker restart app
+fi
+
 sleep 10
 
-# Step 8: Generate APP_KEY and run migrations
-echo "🔑 Step 8/8: Initializing application..."
-# APP_KEY=$(docker-compose --env-file .env.docker exec -T app php artisan key:generate --show)
-APP_KEY="base64:$(openssl rand -base64 32)"
-sed -i "s|APP_KEY=|APP_KEY=$APP_KEY|" .env.docker
-docker-compose --env-file .env.docker restart app
-
-# Wait for restart
-sleep 5
-
-# Run migrations
 echo "📊 Running database migrations..."
 docker-compose --env-file .env.docker exec -T app php artisan migrate --force
 
-# Optimize application
-echo "⚡ Optimizing application..."
+# --- NEW: Fix Scribe/Documentation and Optimize ---
+echo "📚 Finalizing API Documentation..."
+docker-compose --env-file .env.docker exec -T app php artisan route:clear
+docker-compose --env-file .env.docker exec -T app php artisan scribe:generate --force
+
+echo "⚡ Optimizing for production..."
 docker-compose --env-file .env.docker exec -T app php artisan optimize
 
-# Final health check
-echo "🏥 Performing health check..."
-sleep 5
-if curl -f http://localhost/api/health > /dev/null 2>&1; then
-    echo "✅ Health check passed!"
-else
-    echo "⚠️  Health check failed, but installation completed. Check logs with: docker-compose logs"
-fi
-
-echo ""
-echo "🎉 Installation Complete!"
-echo "=========================================="
-echo ""
-echo "📝 Next Steps:"
-echo "1. Point your domain DNS A record to this server's IP"
-echo "2. Wait a few minutes for Let's Encrypt SSL certificate"
-echo "3. Access your application at: https://${DOMAIN}"
-echo ""
-echo "📊 Useful Commands:"
-echo "  View logs:        cd $APP_DIR && docker-compose logs -f"
-echo "  Check status:     cd $APP_DIR && docker-compose ps"
-echo "  Restart services: cd $APP_DIR && docker-compose restart"
-echo "  Stop services:    cd $APP_DIR && docker-compose down"
-echo ""
-echo "🔐 Important: Save these credentials securely!"
-echo "  Database Password: ${DB_PASSWORD}"
-echo "  Redis Password:    ${REDIS_PASSWORD}"
-echo ""
+echo "🎉 Installation Complete! Access at https://${DOMAIN}/docs"

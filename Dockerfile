@@ -18,6 +18,8 @@ COPY . .
 # Generate autoloader
 RUN composer dump-autoload --optimize --no-scripts
 
+RUN php artisan scribe:generate || true
+
 FROM php:8.2-fpm-alpine AS base
 
 # Install system dependencies
@@ -57,7 +59,7 @@ RUN docker-php-ext-configure gd \
     mbstring \
     intl
 
-# Install Redis extension (for caching)
+# Install Redis extension
 RUN pecl install redis \
     && docker-php-ext-enable redis
 
@@ -67,7 +69,6 @@ RUN addgroup -g 1000 www \
     && sed -i 's/user = www-data/user = www/g' /usr/local/etc/php-fpm.d/www.conf \
     && sed -i 's/group = www-data/group = www/g' /usr/local/etc/php-fpm.d/www.conf
 
-# Set working directory
 WORKDIR /var/www/html
 
 # Copy configuration files
@@ -80,8 +81,10 @@ COPY docker/supervisor/supervisord.conf /etc/supervisord.conf
 # Copy application code
 COPY --chown=www:www . .
 
-# Copy built dependencies from composer stage
+# Copy built dependencies AND generated docs from composer stage
 COPY --from=composer --chown=www:www /app/vendor ./vendor
+COPY --from=composer --chown=www:www /app/public/vendor/scribe ./public/vendor/scribe
+COPY --from=composer --chown=www:www /app/resources/views/scribe ./resources/views/scribe
 
 # Set permissions
 RUN chown -R www:www /var/www/html \
@@ -93,56 +96,19 @@ RUN mkdir -p /var/www/html/storage/framework/{sessions,views,cache} \
     && mkdir -p /var/www/html/storage/logs \
     && chown -R www:www /var/www/html/storage
 
-# Create Nginx directories with correct permissions
+# Create Nginx directories
 RUN mkdir -p /var/lib/nginx/tmp/client_body \
-    && mkdir -p /var/lib/nginx/tmp/proxy \
-    && mkdir -p /var/lib/nginx/tmp/fastcgi \
-    && mkdir -p /var/lib/nginx/tmp/uwsgi \
-    && mkdir -p /var/lib/nginx/tmp/scgi \
-    && mkdir -p /var/lib/nginx/logs \
-    && mkdir -p /var/log/nginx \
     && chown -R www:www /var/lib/nginx \
-    && chown -R www:www /var/log/nginx \
-    && chmod -R 755 /var/lib/nginx \
-    && chmod -R 755 /var/log/nginx
+    && chown -R www:www /var/log/nginx
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=40s \
     CMD curl -f http://localhost/api/health || exit 1
 
-# Expose port 80
 EXPOSE 80
 
-#  Development Image
-
-FROM base AS development
-
-# Install Xdebug (debugging)
-RUN apk add --no-cache $PHPIZE_DEPS linux-headers \
-    && pecl install xdebug \
-    && docker-php-ext-enable xdebug
-
-# Copy Xdebug configuration
-COPY docker/php/xdebug.ini /usr/local/etc/php/conf.d/xdebug.ini
-
-# Development PHP settings (opcache.validate_timestamps already set in opcache.ini)
-
-
-# Run as root in development (easier for permissions)
-USER root
-
-# Start supervisor (manages nginx + php-fpm)
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]
-
 # Production Image
-
 FROM base AS production
-
-# Production PHP settings
 RUN echo "opcache.validate_timestamps=0" >> /usr/local/etc/php/conf.d/opcache.ini
-
-# Run as root (supervisor needs it to manage nginx)
 USER root
-
-# Start supervisor
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]
