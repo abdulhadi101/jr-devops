@@ -34,13 +34,13 @@ FROM php:8.2-fpm-alpine AS base
 # Install system dependencies
 RUN apk add --no-cache \
     nginx \           # Web server
-    supervisor \      # Process manager (runs nginx + php-fpm)
-    curl \           # Health checks
-    bash \           # Shell scripts
-    postgresql-dev \ # PostgreSQL support
-    mysql-client \   # MySQL support (optional)
-    libpng-dev \     # Image processing
-    libjpeg-turbo-dev \
+supervisor \      # Process manager (runs nginx + php-fpm)
+curl \           # Health checks
+bash \           # Shell scripts
+postgresql-dev \ # PostgreSQL support
+mysql-client \   # MySQL support (optional)
+libpng-dev \     # Image processing
+libjpeg-turbo-dev \
     freetype-dev \
     libzip-dev \
     oniguruma-dev \
@@ -52,15 +52,15 @@ RUN docker-php-ext-configure gd \
     --with-jpeg \
     && docker-php-ext-install -j$(nproc) \
     pdo \           # Database PDO
-    pdo_mysql \     # MySQL driver
-    pdo_pgsql \     # PostgreSQL driver
-    bcmath \        # Math operations 
-    pcntl \         # Process control
-    gd \            # Image processing
-    zip \           # Zip archives
-    opcache \       # PHP opcode cache 
-    mbstring \      # Multibyte string support
-    intl            # Internationalization
+pdo_mysql \     # MySQL driver
+pdo_pgsql \     # PostgreSQL driver
+bcmath \        # Math operations 
+pcntl \         # Process control
+gd \            # Image processing
+zip \           # Zip archives
+opcache \       # PHP opcode cache 
+mbstring \      # Multibyte string support
+intl            # Internationalization
 
 # Install Redis extension (for caching)
 RUN pecl install redis \
@@ -130,11 +130,6 @@ FROM base AS production
 
 # Production PHP settings
 RUN echo "opcache.validate_timestamps=0" >> /usr/local/etc/php/conf.d/opcache.ini
-
-# Optimize Laravel
-RUN php artisan config:cache || true \
-    && php artisan route:cache || true \
-    && php artisan view:cache || true
 
 # Switch to non-root user
 USER www
