@@ -26,6 +26,7 @@ RUN apk add --no-cache \
     supervisor \
     curl \
     bash \
+    postgresql-dev \
     postgresql-client \
     mysql-client \
     libpng-dev \
