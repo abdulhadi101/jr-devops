@@ -15,7 +15,7 @@ jobs:
   tests:
     name: Tests
     runs-on: ubuntu-latest
-    
+
     steps:
       - uses: actions/checkout@v4
 
@@ -52,7 +52,7 @@ jobs:
   lint:
     name: Code Style
     runs-on: ubuntu-latest
-    
+
     steps:
       - uses: actions/checkout@v4
       - name: Setup PHP
@@ -67,7 +67,7 @@ jobs:
     name: Build & Scan
     runs-on: ubuntu-latest
     needs: [tests, lint]
-    
+
     steps:
       - uses: actions/checkout@v4
 
@@ -111,7 +111,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    
+
     permissions:
       contents: read
       packages: write
@@ -141,14 +141,20 @@ jobs:
           cache-to: type=gha,mode=max
           target: production
 
-  # STAGE 5: Deploy to VPS
+  # STAGE 5: Deploy to VPS (Optional - requires secrets)
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
     needs: [push]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && secrets.VPS_HOST != ''
+
     steps:
+      - name: Check Deployment Configuration
+        run: |
+          echo "🚀 Deploying to VPS..."
+          echo "VPS Host: ${{ secrets.VPS_HOST }}"
+          echo "App Directory: ${{ secrets.APP_DIR }}"
+
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.9.0
         with:
