@@ -91,7 +91,9 @@ jobs:
           echo "APP_URL=https://secure-drop.asuku.xyz" >> .env
 
       - name: Generate API Documentation
-        run: php artisan scribe:generate
+        run: |
+          php artisan scribe:generate
+          php artisan vendor:publish --tag=scribe-assets --force
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
