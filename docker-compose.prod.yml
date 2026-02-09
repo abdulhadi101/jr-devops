@@ -29,8 +29,12 @@ services:
   
   # App Overrides (Production)
   app:
+    # Use pre-built image from GitHub Container Registry
+    image: ghcr.io/abdulhadi101/jr-devops:latest
     
+    # Build configuration (used by CI/CD, not by install.sh)
     build:
+      context: .
       target: production  # Use production stage
     
     # Always restart
