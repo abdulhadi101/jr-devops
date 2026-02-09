@@ -91,6 +91,19 @@ RUN mkdir -p /var/www/html/storage/framework/{sessions,views,cache} \
     && mkdir -p /var/www/html/storage/logs \
     && chown -R www:www /var/www/html/storage
 
+# Create Nginx directories with correct permissions
+RUN mkdir -p /var/lib/nginx/tmp/client_body \
+    && mkdir -p /var/lib/nginx/tmp/proxy \
+    && mkdir -p /var/lib/nginx/tmp/fastcgi \
+    && mkdir -p /var/lib/nginx/tmp/uwsgi \
+    && mkdir -p /var/lib/nginx/tmp/scgi \
+    && mkdir -p /var/lib/nginx/logs \
+    && mkdir -p /var/log/nginx \
+    && chown -R www:www /var/lib/nginx \
+    && chown -R www:www /var/log/nginx \
+    && chmod -R 755 /var/lib/nginx \
+    && chmod -R 755 /var/log/nginx
+
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=40s \
     CMD curl -f http://localhost/api/health || exit 1
@@ -126,8 +139,8 @@ FROM base AS production
 # Production PHP settings
 RUN echo "opcache.validate_timestamps=0" >> /usr/local/etc/php/conf.d/opcache.ini
 
-# Switch to non-root user
-USER www
+# Run as root (supervisor needs it to manage nginx)
+USER root
 
 # Start supervisor
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]

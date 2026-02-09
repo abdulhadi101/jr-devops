@@ -75,10 +75,23 @@ curl -fsSL https://raw.githubusercontent.com/abdulhadi101/jr-devops/main/docker-
 curl -fsSL https://raw.githubusercontent.com/abdulhadi101/jr-devops/main/docker-compose.prod.yml -o docker-compose.prod.yml
 echo "✅ Configuration files downloaded"
 
-# Step 6: Generate secure passwords and create .env.docker
+# Step 6: Generate secure credentials (or reuse existing)
 echo "🔐 Step 6/8: Generating secure credentials..."
-DB_PASSWORD=$(openssl rand -base64 32)
-REDIS_PASSWORD=$(openssl rand -base64 32)
+
+# Check if .env.docker already exists to preserve passwords
+if [ -f .env.docker ]; then
+    echo "♻️  Reuse existing configuration from .env.docker"
+    # Extract existing passwords to ensure they persist
+    DB_PASSWORD=$(grep DB_PASSWORD .env.docker | cut -d '=' -f2)
+    REDIS_PASSWORD=$(grep REDIS_PASSWORD .env.docker | cut -d '=' -f2)
+    
+    # If extraction failed, generate new ones
+    if [ -z "$DB_PASSWORD" ]; then DB_PASSWORD=$(openssl rand -base64 32); fi
+    if [ -z "$REDIS_PASSWORD" ]; then REDIS_PASSWORD=$(openssl rand -base64 32); fi
+else
+    DB_PASSWORD=$(openssl rand -base64 32)
+    REDIS_PASSWORD=$(openssl rand -base64 32)
+fi
 
 cat > .env.docker <<EOF
 APP_NAME="Secure Drop"
@@ -106,7 +119,7 @@ REDIS_PASSWORD=${REDIS_PASSWORD}
 REDIS_PORT=6379
 
 TRAEFIK_HOST=${DOMAIN}
-ACME_EMAIL=${ACME_EMAIL}
+LETSENCRYPT_EMAIL=${ACME_EMAIL}
 EOF
 
 echo "✅ Environment file created"
