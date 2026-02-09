@@ -141,26 +141,35 @@ jobs:
           cache-to: type=gha,mode=max
           target: production
 
-  # STAGE 5: Deploy to VPS (Optional - requires secrets)
+  # STAGE 5: Deploy to VPS (Optional - skipped if secrets not configured)
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
     needs: [push]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && secrets.VPS_HOST != ''
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
       - name: Check Deployment Configuration
+        id: check-secrets
         run: |
-          echo "🚀 Deploying to VPS..."
-          echo "VPS Host: ${{ secrets.VPS_HOST }}"
-          echo "App Directory: ${{ secrets.APP_DIR }}"
+          if [ -z "${{ secrets.VPS_HOST }}" ]; then
+            echo "⏭️  Skipping deployment - VPS secrets not configured"
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "🚀 Deploying to VPS..."
+            echo "VPS Host: ${{ secrets.VPS_HOST }}"
+            echo "App Directory: ${{ secrets.APP_DIR }}"
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Setup SSH
+        if: steps.check-secrets.outputs.skip != 'true'
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
       - name: Deploy to VPS
+        if: steps.check-secrets.outputs.skip != 'true'
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
             cd ${{ secrets.APP_DIR }}
@@ -171,6 +180,7 @@ jobs:
           EOF
 
       - name: Health Check
+        if: steps.check-secrets.outputs.skip != 'true'
         run: |
           sleep 10
           curl -f https://${{ secrets.PRODUCTION_DOMAIN }}/api/health || exit 1
