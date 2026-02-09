@@ -113,8 +113,8 @@ echo "✅ Environment file created"
 
 # Step 7: Pull and start services
 echo "🐳 Step 7/8: Starting Docker services..."
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml pull
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+docker-compose --env-file .env.docker -f docker-compose.yml -f docker-compose.prod.yml pull
+docker-compose --env-file .env.docker -f docker-compose.yml -f docker-compose.prod.yml up -d
 
 # Wait for app container to be ready
 echo "⏳ Waiting for application to start..."
@@ -122,20 +122,20 @@ sleep 10
 
 # Step 8: Generate APP_KEY and run migrations
 echo "🔑 Step 8/8: Initializing application..."
-APP_KEY=$(docker-compose exec -T app php artisan key:generate --show)
+APP_KEY=$(docker-compose --env-file .env.docker exec -T app php artisan key:generate --show)
 sed -i "s|APP_KEY=|APP_KEY=$APP_KEY|" .env.docker
-docker-compose restart app
+docker-compose --env-file .env.docker restart app
 
 # Wait for restart
 sleep 5
 
 # Run migrations
 echo "📊 Running database migrations..."
-docker-compose exec -T app php artisan migrate --force
+docker-compose --env-file .env.docker exec -T app php artisan migrate --force
 
 # Optimize application
 echo "⚡ Optimizing application..."
-docker-compose exec -T app php artisan optimize
+docker-compose --env-file .env.docker exec -T app php artisan optimize
 
 # Final health check
 echo "🏥 Performing health check..."
