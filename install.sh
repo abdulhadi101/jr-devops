@@ -135,7 +135,8 @@ sleep 10
 
 # Step 8: Generate APP_KEY and run migrations
 echo "🔑 Step 8/8: Initializing application..."
-APP_KEY=$(docker-compose --env-file .env.docker exec -T app php artisan key:generate --show)
+# APP_KEY=$(docker-compose --env-file .env.docker exec -T app php artisan key:generate --show)
+APP_KEY="base64:$(openssl rand -base64 32)"
 sed -i "s|APP_KEY=|APP_KEY=$APP_KEY|" .env.docker
 docker-compose --env-file .env.docker restart app
 
