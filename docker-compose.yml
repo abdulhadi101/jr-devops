@@ -1,7 +1,7 @@
 services:
   # Traefik Reverse Proxy
   traefik:
-    image: traefik:v3.2
+    image: traefik:latest
     
     # Basic Traefik configuration
     command:
@@ -19,7 +19,7 @@ services:
     
     # Docker socket access
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro 
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       - traefik-certificates:/certificates
     
     networks:
