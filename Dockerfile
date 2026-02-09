@@ -63,7 +63,9 @@ RUN pecl install redis \
 
 # Create non-root user
 RUN addgroup -g 1000 www \
-    && adduser -u 1000 -G www -s /bin/sh -D www
+    && adduser -u 1000 -G www -s /bin/sh -D www \
+    && sed -i 's/user = www-data/user = www/g' /usr/local/etc/php-fpm.d/www.conf \
+    && sed -i 's/group = www-data/group = www/g' /usr/local/etc/php-fpm.d/www.conf
 
 # Set working directory
 WORKDIR /var/www/html
