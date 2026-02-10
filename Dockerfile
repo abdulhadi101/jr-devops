@@ -18,8 +18,6 @@ COPY . .
 # Generate autoloader
 RUN composer dump-autoload --optimize --no-scripts
 
-RUN php artisan scribe:generate || true
-
 FROM php:8.2-fpm-alpine AS base
 
 # Install system dependencies
@@ -83,8 +81,6 @@ COPY --chown=www:www . .
 
 # Copy built dependencies AND generated docs from composer stage
 COPY --from=composer --chown=www:www /app/vendor ./vendor
-COPY --from=composer --chown=www:www /app/public/vendor/scribe ./public/vendor/scribe
-COPY --from=composer --chown=www:www /app/resources/views/scribe ./resources/views/scribe
 
 # Set permissions
 RUN chown -R www:www /var/www/html \
@@ -109,6 +105,6 @@ EXPOSE 80
 
 # Production Image
 FROM base AS production
-RUN echo "opcache.validate_timestamps=0" >> /usr/local/etc/php/conf.d/opcache.ini
+RUN echo "opcache.validate_timestamps=1" >> /usr/local/etc/php/conf.d/opcache.ini
 USER root
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]

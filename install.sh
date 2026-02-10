@@ -144,10 +144,11 @@ sleep 10
 echo "📊 Running database migrations..."
 docker-compose --env-file .env.docker exec -T app php artisan migrate --force
 
-# --- NEW: Fix Scribe/Documentation and Optimize ---
 echo "📚 Finalizing API Documentation..."
 docker-compose --env-file .env.docker exec -T app php artisan route:clear
 docker-compose --env-file .env.docker exec -T app php artisan scribe:generate --force
+docker-compose --env-file .env.docker exec -T app sh -c "chown -R www:www public/vendor/scribe resources/views/scribe storage/app/scribe 2>/dev/null || true"
+
 
 echo "⚡ Optimizing for production..."
 docker-compose --env-file .env.docker exec -T app php artisan optimize
