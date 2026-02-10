@@ -123,19 +123,20 @@ EOF
 
 echo "✅ Environment file created"
 
-# Step 7: Pull and start
-echo "🐳 Step 7/8: Starting Docker services..."
-docker-compose --env-file .env.docker -f docker-compose.yml -f docker-compose.prod.yml pull
-docker-compose --env-file .env.docker -f docker-compose.yml -f docker-compose.prod.yml up -d
 
-# Step 8: Initialization logic
-echo "🔑 Step 8/8: Initializing application..."
+# Step 7: Finalize Configuration
+echo "🔑 Step 7/8: Finalizing configuration..."
 # Generate key if empty
 if ! grep -q "APP_KEY=base64" .env.docker; then
     APP_KEY="base64:$(openssl rand -base64 32)"
     sed -i "s|APP_KEY=|APP_KEY=$APP_KEY|" .env.docker
-    docker-compose --env-file .env.docker restart app
+    echo "✅ Generated new APP_KEY"
 fi
+
+# Step 8: Pull and start
+echo "🐳 Step 8/8: Starting Docker services..."
+docker-compose --env-file .env.docker -f docker-compose.yml -f docker-compose.prod.yml pull
+docker-compose --env-file .env.docker -f docker-compose.yml -f docker-compose.prod.yml up -d
 
 sleep 10
 
