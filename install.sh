@@ -98,6 +98,7 @@ APP_ENV=production
 APP_DEBUG=false
 APP_KEY=
 APP_URL=https://${DOMAIN}
+ASSET_URL=https://${DOMAIN}
 
 LOG_CHANNEL=stack
 LOG_LEVEL=error
